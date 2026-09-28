@@ -1,65 +1,128 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useEffect, useState, useMemo, useCallback } from "react";
+import { SiteHeader } from "../components/layout/SiteHeader";
+import { SiteFooter } from "../components/layout/SiteFooter";
+import { HeroSection } from "../components/reader/HeroSection";
+import { TopicFilterBar } from "../components/reader/TopicFilterBar";
+import { FeaturedPost } from "../components/reader/FeaturedPost";
+import { PostGrid } from "../components/reader/PostGrid";
+import { NewsletterBlock } from "../components/reader/NewsletterBlock";
+import { FeaturedPostSkeleton } from "../components/ui/Skeleton";
+import { Post, Tag, Pagination } from "../lib/types";
+import { readerApi } from "../lib/api";
+
+export default function HomePage() {
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedTag, setSelectedTag] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 9,
+    total: 0,
+    totalPages: 1,
+  });
+  const [loading, setLoading] = useState(true);
+
+  // Load tags once on mount
+  useEffect(() => {
+    readerApi.tags.getAll().then(setTags).catch(() => setTags([]));
+  }, []);
+
+  // Fetch published posts when page or tag changes
+  const loadPosts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await readerApi.posts.getPublished({
+        page: currentPage,
+        limit: 9,
+        tag: selectedTag || undefined,
+      });
+
+      if (res.success) {
+        setPosts(res.data || []);
+        setPagination(
+          res.pagination || {
+            page: currentPage,
+            limit: 9,
+            total: res.data?.length || 0,
+            totalPages: 1,
+          }
+        );
+      }
+    } catch {
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, selectedTag]);
+
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
+
+  const handleSelectTag = (tagSlug: string) => {
+    setSelectedTag(tagSlug);
+    setCurrentPage(1);
+  };
+
+  // Determine featured post: show on page 1 only if there's at least one post and no specific tag filter
+  const isDefaultView = currentPage === 1 && !selectedTag;
+  const featuredPost = useMemo(() => {
+    if (isDefaultView && posts.length > 0) {
+      return posts[0];
+    }
+    return null;
+  }, [isDefaultView, posts]);
+
+  const gridPosts = useMemo(() => {
+    if (featuredPost) {
+      return posts.slice(1);
+    }
+    return posts;
+  }, [featuredPost, posts]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+    <div className="flex min-h-screen flex-col bg-stone-50 text-stone-900 selection:bg-emerald-200 selection:text-emerald-950 font-sans">
+      <SiteHeader />
+
+      <main className="flex-1">
+        <div className="mx-auto max-w-7xl px-6 sm:px-8">
+          <HeroSection />
+
+          <TopicFilterBar
+            tags={tags}
+            selectedTag={selectedTag}
+            onSelectTag={handleSelectTag}
+          />
+
+          {loading && !posts.length ? (
+            <div className="space-y-12 mb-16">
+              <FeaturedPostSkeleton />
+            </div>
+          ) : (
+            <>
+              {featuredPost && <FeaturedPost post={featuredPost} />}
+
+              <PostGrid
+                posts={gridPosts}
+                loading={loading}
+                pagination={pagination}
+                onPageChange={(page) => {
+                  setCurrentPage(page);
+                  window.scrollTo({ top: 400, behavior: "smooth" });
+                }}
+                onClearFilter={() => handleSelectTag("")}
+              />
+            </>
+          )}
+
+          <NewsletterBlock />
         </div>
       </main>
+
+      <SiteFooter />
     </div>
   );
 }
